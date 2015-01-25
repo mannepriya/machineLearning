@@ -1,0 +1,98 @@
+---
+title: "CourseProject_Machine Learning"
+author: "Laksmi Priya M"
+date: "Thursday, January 22, 2015"
+output: html_document
+---
+
+##Summary:
+The report summarises the development of a prediction model for predicting the 
+class of exercise carried out based on various accelerometer measurements.The execrcises are classified into 5 different classes captured in the variable classe.I have used the method Random Forest for building the prediction method.
+This has given an accuracy of >99% for the testing set created.
+
+##Analysis
+```{r}
+training<-read.csv("./pml-training.csv")
+testing<-read.csv("./pml-testing.csv")
+dim(training)
+library(caret)
+```
+
+The data has been downloaded from the source and saved into the working directory
+This data has been read into variables training and testing respectively.
+From the dimentions of the data we can note that the data has got 160 different variables,
+As this is a huge number of predictors, we need to preprocess the data to evaluate which variables to use for prediction
+
+##Preprocessing:
+Since the prediction algorithms cannot work with missing values, we have to check for any missing values in the data
+```{r}
+anyMissing<-sapply(training,is.na)
+NAColumns<-apply(anyMissing,2,sum)
+```
+We can observe from this that for some of the columns majority of the 
+observations are missing. As more than 90% of the observations are missing, it doesnot make sense to try and impute the missing observation.these columns can not be valuble predictors and hence have been removed from predictor list and a new variable training_sub is created as a subset of training.
+
+For further reducing the predictor count, variables with near zero variance have been checked using the function nsv, and these variables are removed from predictor list.
+As variables with near zero variance do not give any useful information about the output variable, they need not be included in the predictor list. 
+```{r}
+training_sub<-subset(training,select=names(NAColumns[NAColumns==0]))
+nsv<-nearZeroVar(training_sub)
+training_sub<-training_sub[,-nsv]
+str(training_sub)
+```
+from the summary we can also observe that columns 1:5 can be excluded from
+predictors As these are indicating index no, name and time stamp of when the activity was carried out and are unlikely to predict the outcome based on that.
+However we have plotted these first five columns against the output classe to enunciate the same
+```{r}
+par(mfrow=c(2,3))
+plot(x=training_sub[,1],y=training_sub$classe)
+plot(x=training_sub[,2],y=training_sub$classe)
+plot(x=training_sub[,3],y=training_sub$classe)
+plot(x=training_sub[,4],y=training_sub$classe)
+plot(x=training_sub[,5],y=training_sub$classe)
+```
+From the plots it can be clearly observed that columns 1 is extremely 
+highly correlated to the output. This is caused by column 1 being the order of observations and observations are arranged in the order of the output variable classe. If this variable is used as a predictor in the model, it can correctly predict in the training set however if data is not following a similar order,it will not be able to predict it. Hence this needs to be removed from the predictor list. We can also observe from the other plots that time stamps and name of 
+the participants also do not indicate any correlating pattern with the output and hence can be removed from the predictor list.
+
+A subset training1 is formed containing observations from only the predictor 
+variables and the output variable
+  
+```{r}
+training1<-training_sub[,-(1:5)]
+```
+## Subsetting Data for CrossValidation
+It is important to performing cross validation in order to verify how the model will work for out of sample data.
+Hence the given training data has been divided into two subsets for training and testing the model. 70% of the observations are taken into trainng set and 30% of the observations are loaded into testing set.
+```{r}
+inTrain<-createDataPartition(y=training1$classe,p=0.7,list=FALSE)
+training2<-training1[inTrain,]
+test_trial<-training1[-inTrain,]
+```
+
+## building the model
+As this is a classification problem with classe being a factor variable we can use the randomForest method for building the model. We have used the function from randomForest package instead of the train function in caret package, because train function resorts to default bootstrapping, which may take a very long time on a basic laptop.However crossvalidation carried out through bootstrapping in train function is expected to result in a greater accuracy.
+
+```{r}
+library(randomForest)
+modelfit<-randomForest(classe~.,data=training2)
+predicted<-predict(modelfit,training2)
+confusionMatrix(predicted,training2$classe)
+```
+We can observe that, the accuracy is 100%, it is possible that the model is overfitted, which is one of the downsides of using the randomForest method for model building. 
+We can also view the variable importance of different variables as shown below
+```{r}
+varImp(modelfit)
+```
+Highest correlated variable is shown as num_window. 
+
+## Cross Validation
+We have tested the model against the testing data set created by us for cross validation. The out of sample error rate for this is expected to be higher than the insample error rate which is 0%.
+```{r}
+predict_test<-predict(modelfit,test_trial)
+confusionMatrix(predict_test,test_trial$classe)
+```
+This indicates a 99.8% accuracy. Hence the out of sample error rate is 0.2%. Which is as expected higher than the insample error rate.
+
+
+
